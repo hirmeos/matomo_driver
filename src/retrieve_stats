@@ -91,11 +91,11 @@ def get_options(args):
                           action=arg['action'], help=arg['help'])
     options, rest = parser.parse_args()
 
-    required = options.endpoint and options.date and options.token \
-               and options.site_id and options.method
+    required = all([options.endpoint, options.date, options.token,
+                    options.site_id, options.method])
     if not rest == [] or not required:
         m = 'Missing api-endpoint, date, token, site-id or method.'
-        print >>sys.stderr, m
+        print(m, file=sys.stderr)
         sys.exit(1)
     return options
 
