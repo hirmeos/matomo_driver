@@ -6,10 +6,12 @@ import json
 import subprocess
 from datetime import datetime, timedelta
 
+MATOMO_API_ENDP = os.environ['MATOMO_API_ENDP']
 MODES = json.loads(os.getenv('MODES'))
 OUTDIR = os.environ['OUTDIR']
 CACHEDIR = os.environ['CACHEDIR']
 CUTOFF_DAYS = int(os.environ['CUTOFF_DAYS'])
+REDO_OUTPUT = str(os.getenv('REDO_OUTPUT')).lower() == 'true'
 
 
 def outstream(filename):
@@ -21,11 +23,11 @@ def instream(filename):
 
 
 def get_cache_filename(odir, name, d):
-    return "%s/matomo_%s_%s.csv" % (odir, d, name)
+    return f'{odir}/matomo_{d}_{name}.json'
 
 
 def get_output_filename(odir, date):
-    return "%s/matomo_%s.csv" % (odir, date)
+    return f'{odir}/matomo_{date}.csv'
 
 
 def generate_dates(date, cutoff_date):
@@ -81,11 +83,10 @@ def compile_config(config_list):
     return vals
 
 
-def cache_ga_stats(outputstream, date, key_path, config):
-    cmd = ['./retrieve_ga_stats',
-           '--start-date', date,
-           '--end-date', date,
-           '--key-path', key_path] + config
+def cache_stats(outputstream, endpoint, date, config):
+    cmd = ['./retrieve_stats',
+           '--api-endpoint', endpoint,
+           '--date', date] + config
     subprocess.call(cmd, stdout=outputstream)
 
 
@@ -102,23 +103,24 @@ def resolve_cache(output_stream, input_stream, measure,
 
 def run():
     cutoff_date = get_cutoff_date(CUTOFF_DAYS)
-    # cache Google Analtics API responses for all MODES
+    # cache Matomo API responses for all MODES
     for m in MODES:
         config = compile_config(m['config'])
         for day in generate_dates(m['startDate'], cutoff_date):
             date = day.strftime('%Y-%m-%d')
             cache_file = get_cache_filename(CACHEDIR, m['name'], date)
             if not exists_and_not_empty(cache_file):
-                cache_ga_stats(outstream(cache_file), date, KEY_PATH, config)
+                output = outstream(cache_file)
+                cache_stats(output, MATOMO_API_ENDP, date, config)
 
-    # now we standarise GA reports and store them in each output CSV
+    # now we standarise reports and store them in each output CSV
     earliest_date = get_earliest([m['startDate'] for m in MODES])
     for day in generate_dates(earliest_date, cutoff_date):
         date = day.strftime('%Y-%m-%d')
         out_file = get_output_filename(OUTDIR, date)
 
-        # continue if output file already exists
-        if exists_and_not_empty(out_file):
+        # continue if output file already exists, unless redoing them
+        if exists_and_not_empty(out_file) and not REDO_OUTPUT:
             continue
 
         i = 0

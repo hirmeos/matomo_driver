@@ -8,7 +8,6 @@ import sys
 import json
 import urllib2
 import httplib2
-import unicodecsv
 from optparse import OptionParser
 
 
@@ -27,7 +26,7 @@ ARGS = [
         'dest': 'measure',
         'action': 'store',
         'default': None,
-        'help': 'Measure URI, e.g. tag:operas.eu,2018:readership:obp-pdf'
+        'help': 'Measure URI, e.g. https://metrics.operas-eu.org/obp/sessions'
     }, {
         'val': '--prefix',
         'dest': 'prefix',
@@ -149,35 +148,30 @@ def standarise_row(row):
 
 def resolve(date, prefix, regex):
     timestamp = date + " 00:00:00"
-    r = csv.reader(sys.stdin)
-    next(r, None)  # skip the headers
+    r = json.load(sys.stdin)
 
     for row in r:
-        path, country_code, value = standarise_row(row)
+        path, value = standarise_row(row)
         url = sanitise_url(normalise_url(convert_url(path), prefix), regex)
-        if country_code == 'ZZ':
-            # Google uses country code ZZ when no country data is available
-            country = ''
-        else:
-            country = standarise_country(country_code, COUNTRY_URI_SCHEME)
         for identifier in url_to_id(url, date):
             uri = identifier['URI']
-            yield (timestamp, uri, country, value)
+            yield (timestamp, uri, value)
 
 
 def run(measure, prefix, date, regex, add_headers):
     hits = {}
-    for timestamp, uri, country, value in resolve(date, prefix, regex):
-        key = (timestamp, uri, country)
+    for timestamp, uri, value in resolve(date, prefix, regex):
+        key = (timestamp, uri)
         if key not in hits:
             hits[key] = 0
         hits[key] += int(value)
 
-    w = unicodecsv.writer(sys.stdout)
+    w = csv.writer(sys.stdout)
     if add_headers:
-        w.writerow(('Measure', 'Timestamp', 'URI', 'Country', 'Value'))
+        w.writerow(('measure_uri', 'timestamp', 'work_uri',
+                    'country_uri', 'event_uri', 'value'))
     for key, value in hits.iteritems():
-        row = tuple([measure] + list(key) + [value])
+        row = tuple([measure] + list(key) + ['', '', value])
         w.writerow(row)
 
 
